@@ -6,6 +6,30 @@ Cook-Torrance 기반의 사실적인 조명을 사용하는 PBR 렌더링 시스
 
 이 프로젝트는 물리 기반 렌더링(Physically Based Rendering)을 구현한 3D 렌더러입니다. Cook-Torrance BRDF 모델을 사용하여 사실적인 조명과 재질 표현을 제공합니다.
 
+## 스크린샷
+
+### 최종 결과
+![최종 결과](Docs/최종.png)
+
+### 기능별 비교
+
+#### 모든 기능 OFF
+![All Features OFF](Docs/all_off.png)
+
+#### Tangent Space ON
+![Tangent Space ON](Docs/Tangent%20Space%20on.png)
+
+#### IBL (Image Based Lighting) ON
+![IBL ON](Docs/IBL%20on.png)
+
+#### Albedo sRGB ON
+![Albedo sRGB ON](Docs/Albedo_sRGB%20on.png)
+
+### 디테일 뷰
+![Detail 1](Docs/Detail1.png)
+![Detail 2](Docs/Detail2.png)
+![Detail 3](Docs/Detail3.png)
+
 ## 주요 기능
 
 ### 렌더링 기능
@@ -122,15 +146,18 @@ make
 - `ESC`: 프로그램 종료
 
 ### 렌더링 모드 토글
-- `TAB`: Tangent Space 모드 토글
+- `V`: Tangent Space 모드 토글
   - ON: Tangent Space Normal Mapping 사용 (고품질)
   - OFF: World Space Normal 사용
-- `SHIFT`: IBL (Image Based Lighting) 모드 토글
+- `B`: IBL (Image Based Lighting) 모드 토글
   - ON: 환경 맵 기반 조명 사용
   - OFF: 점 조명만 사용
-- `SPACE`: Albedo sRGB 모드 토글
+- `N`: Albedo sRGB 모드 토글
   - ON: Albedo 텍스처를 sRGB에서 선형으로 변환
   - OFF: Albedo 텍스처를 선형 공간으로 가정
+- `0`: 마우스 커서 잠금/해제
+  - 잠금: 마우스로 카메라 회전 가능
+  - 해제: 마우스 커서가 윈도우 밖으로 이동 가능
 
 프로그램 시작 시 콘솔에 키 매핑 안내가 표시되며, 각 키를 누를 때마다 현재 상태가 콘솔에 출력됩니다.
 
@@ -162,6 +189,15 @@ proj03_v3/
 │   ├── mjolnir3_lp_GreyMetal_Metallic.png
 │   ├── mjolnir3_lp_GreyMetal_Roughness.png
 │   └── mjolnir3_lp_GreyMetal_Height.png
+├── Docs/                   # 스크린샷 및 문서
+│   ├── 최종.png
+│   ├── all_off.png
+│   ├── Tangent Space on.png
+│   ├── IBL on.png
+│   ├── Albedo_sRGB on.png
+│   ├── Detail1.png
+│   ├── Detail2.png
+│   └── Detail3.png
 └── mjolnirFBX.FBX          # 3D 모델 파일
 ```
 
@@ -173,14 +209,17 @@ proj03_v3/
    ```
 
 2. **Tangent Space 모드 전환**
-   - `TAB` 키를 눌러 Tangent Space Normal Mapping 활성화/비활성화
+   - `V` 키를 눌러 Tangent Space Normal Mapping 활성화/비활성화
 
 3. **IBL 모드 전환**
-   - `SHIFT` 키를 눌러 Image Based Lighting 활성화/비활성화
+   - `B` 키를 눌러 Image Based Lighting 활성화/비활성화
    - (IBL 텍스처가 준비된 경우)
 
 4. **sRGB 변환 전환**
-   - `SPACE` 키를 눌러 Albedo 텍스처의 sRGB 변환 활성화/비활성화
+   - `N` 키를 눌러 Albedo 텍스처의 sRGB 변환 활성화/비활성화
+
+5. **마우스 커서 제어**
+   - `0` 키를 눌러 마우스 커서 잠금/해제
 
 ## 기술 세부사항
 

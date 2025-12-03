@@ -29,9 +29,12 @@ float lastFrame = 0.0f;
 bool useTangentSpace = true;
 bool useIBL = true;
 bool albedoIsSRGB = true;
-bool tabPressed = false;
-bool shiftPressed = false;
-bool spacePressed = false;
+bool vPressed = false;  // v: Tangent Space
+bool bPressed = false;  // b: IBL
+bool nPressed = false;  // n: Albedo sRGB
+bool mPressed = false;  // m: (예비)
+bool zeroPressed = false;
+bool cursorLocked = true;  // 마우스 커서 잠금 상태
 
 int main()
 {
@@ -71,9 +74,10 @@ int main()
     std::cout << "W/A/S/D: 카메라 이동" << std::endl;
     std::cout << "마우스 이동: 시점 변경" << std::endl;
     std::cout << "마우스 휠: 줌 인/아웃" << std::endl;
-    std::cout << "TAB: Tangent Space 모드 토글" << std::endl;
-    std::cout << "SHIFT: IBL (Image Based Lighting) 모드 토글" << std::endl;
-    std::cout << "SPACE: Albedo sRGB 모드 토글" << std::endl;
+    std::cout << "V: Tangent Space 모드 토글" << std::endl;
+    std::cout << "B: IBL (Image Based Lighting) 모드 토글" << std::endl;
+    std::cout << "N: Albedo sRGB 모드 토글" << std::endl;
+    std::cout << "0: 마우스 커서 잠금/해제" << std::endl;
     std::cout << "ESC: 종료\n" << std::endl;
     
     Shader shader("shader.vert", "shader.frag");
@@ -176,44 +180,62 @@ void processInput(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(RIGHT, deltaTime);
     
-    // Tab 키: Tangent Space 모드 토글
-    if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS && !tabPressed)
+    // V 키: Tangent Space 모드 토글
+    if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS && !vPressed)
     {
         useTangentSpace = !useTangentSpace;
-        tabPressed = true;
+        vPressed = true;
         std::cout << "Tangent Space: " << (useTangentSpace ? "ON" : "OFF") << std::endl;
     }
-    if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_RELEASE)
+    if (glfwGetKey(window, GLFW_KEY_V) == GLFW_RELEASE)
     {
-        tabPressed = false;
+        vPressed = false;
     }
     
-    // Shift 키: IBL 모드 토글
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || 
-        glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
+    // B 키: IBL 모드 토글
+    if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS && !bPressed)
     {
-        if (!shiftPressed)
-        {
-            useIBL = !useIBL;
-            shiftPressed = true;
-            std::cout << "IBL (Image Based Lighting): " << (useIBL ? "ON" : "OFF") << std::endl;
-        }
+        useIBL = !useIBL;
+        bPressed = true;
+        std::cout << "IBL (Image Based Lighting): " << (useIBL ? "ON" : "OFF") << std::endl;
     }
-    else
+    if (glfwGetKey(window, GLFW_KEY_B) == GLFW_RELEASE)
     {
-        shiftPressed = false;
+        bPressed = false;
     }
     
-    // Space 키: Albedo sRGB 모드 토글
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !spacePressed)
+    // N 키: Albedo sRGB 모드 토글
+    if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS && !nPressed)
     {
         albedoIsSRGB = !albedoIsSRGB;
-        spacePressed = true;
+        nPressed = true;
         std::cout << "Albedo sRGB: " << (albedoIsSRGB ? "ON" : "OFF") << std::endl;
     }
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
+    if (glfwGetKey(window, GLFW_KEY_N) == GLFW_RELEASE)
     {
-        spacePressed = false;
+        nPressed = false;
+    }
+    
+    // 0 키: 마우스 커서 잠금/해제 토글
+    if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS && !zeroPressed)
+    {
+        cursorLocked = !cursorLocked;
+        if (cursorLocked)
+        {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            std::cout << "마우스 커서: 잠금됨" << std::endl;
+            firstMouse = true;  // 마우스 잠금 시 첫 이동 초기화
+        }
+        else
+        {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            std::cout << "마우스 커서: 해제됨" << std::endl;
+        }
+        zeroPressed = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_0) == GLFW_RELEASE)
+    {
+        zeroPressed = false;
     }
 }
 
@@ -224,6 +246,10 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
+    // 마우스 커서가 잠겨있을 때만 카메라 회전
+    if (!cursorLocked)
+        return;
+    
     if (firstMouse)
     {
         lastX = xpos;

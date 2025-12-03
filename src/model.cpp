@@ -259,6 +259,11 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial *mat, aiTextureType 
         {
             Texture texture;
             texture.id = TextureFromFile(str.C_Str(), this->directory);
+            if (texture.id == 0)
+            {
+                std::cout << "  Skipping texture (failed to load): " << str.C_Str() << std::endl;
+                continue;
+            }
             texture.type = typeName;
             texture.path = str.C_Str();
             textures.push_back(texture);

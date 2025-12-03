@@ -30,6 +30,75 @@ Cook-Torrance 기반의 사실적인 조명을 사용하는 PBR 렌더링 시스
 ![Detail 2](Docs/Detail2.png)
 ![Detail 3](Docs/Detail3.png)
 
+## 기술 사양
+
+### 구현 언어 및 그래픽 API
+- **언어**: C++17
+- **그래픽 API**: OpenGL 3.3 Core Profile
+- **윈도우 관리**: GLFW3
+- **수학 라이브러리**: GLM (OpenGL Mathematics)
+- **모델 로딩**: Assimp
+- **이미지 로딩**: stb_image
+
+### 사용한 텍스처 종류
+프로젝트에서 사용하는 PBR Material 텍스처 맵:
+- **Albedo Map** (BaseColor/Diffuse): 기본 색상 정보
+- **Normal Map**: 표면 디테일을 위한 노말 벡터
+- **Metallic Map**: 금속성 정보 (0.0 = 비금속, 1.0 = 금속)
+- **Roughness Map**: 표면 거칠기 정보 (0.0 = 매끄러움, 1.0 = 거침)
+- **AO Map** (Ambient Occlusion): 앰비언트 오클루전 정보
+
+**Fallback 처리**:
+- Metallic Map이 없을 경우: Specular Map 사용
+- Roughness Map이 없을 경우: Shininess 값의 반전 사용
+- Material에 텍스처가 없을 경우: `Pbr/` 디렉토리에서 기본 PBR 텍스처 자동 로드
+
+### 셰이더 및 조명 모델 커스터마이징
+
+#### Cook-Torrance BRDF 구현
+- **Normal Distribution Function**: GGX/Trowbridge-Reitz 분포 사용
+- **Geometry Function**: Schlick-GGX 근사 + Smith 방법
+- **Fresnel Equation**: Fresnel-Schlick 근사
+
+#### 커스터마이징 기능
+1. **Tangent Space / World Space 선택 가능**
+   - Tangent Space: 고품질 Normal Mapping (기본값)
+   - World Space: 간단한 Normal 사용
+   - 런타임 토글 가능 (V 키)
+
+2. **Image Based Lighting (IBL) 지원**
+   - 환경 맵 기반 조명 계산
+   - Irradiance Map, Prefilter Map, BRDF LUT 사용
+   - 런타임 토글 가능 (B 키)
+
+3. **sRGB/Linear 색공간 변환**
+   - Albedo 텍스처의 sRGB → Linear 변환 옵션
+   - 런타임 토글 가능 (N 키)
+
+4. **HDR Tone Mapping 및 Gamma Correction**
+   - Reinhard Tone Mapping 적용
+   - Gamma 2.2 보정
+
+### 재질 구성
+
+#### 두 가지 이상의 재질을 가진 물체 사용
+**예**: 사용된 모델 (mjolnirFBX.FBX)은 여러 메시로 구성되어 있으며, 각 메시는 독립적인 Material을 가질 수 있습니다.
+
+- **메탈릭 재질**: 망치의 금속 부분 (높은 Metallic 값)
+- **비메탈릭 재질**: 망치의 손잡이나 기타 부분 (낮은 Metallic 값)
+
+Assimp를 통해 모델을 로드할 때:
+- 각 메시는 독립적인 Material 인덱스를 가짐
+- 각 Material은 별도의 텍스처 맵 세트를 가질 수 있음
+- `processMesh()` 함수에서 각 메시의 Material을 개별적으로 처리
+- 여러 메시가 서로 다른 재질 속성을 가질 수 있음
+
+**구현 방식**:
+- 모델의 각 메시는 `processMesh()`에서 개별적으로 처리됨
+- 각 메시는 자신의 Material 인덱스를 통해 텍스처를 로드
+- 텍스처가 없는 경우 기본 PBR 텍스처를 공유하여 사용
+- 메시별로 다른 Metallic, Roughness 값을 가질 수 있음
+
 ## 주요 기능
 
 ### 렌더링 기능

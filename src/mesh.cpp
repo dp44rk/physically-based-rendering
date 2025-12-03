@@ -46,68 +46,55 @@ void Mesh::setupMesh()
 
 void Mesh::Draw(Shader &shader, bool enableTangentSpace)
 {
+    // 텍스처 타입별 플래그 및 유닛 번호 매핑
+    struct TextureBinding {
+        bool* hasFlag;
+        int textureUnit;
+        const char* shaderName;
+    };
+    
     bool hasAlbedo = false;
     bool hasNormal = false;
     bool hasMetallic = false;
     bool hasRoughness = false;
     bool hasAo = false;
     
-    // 고정된 텍스처 유닛 사용: 0=albedo, 1=normal, 2=metallic, 3=roughness, 4=ao
-    // 먼저 모든 텍스처를 찾아서 바인딩
+    // 한 번의 순회로 텍스처 체크 및 바인딩
     for(unsigned int i = 0; i < textures.size(); i++)
     {
-        std::string name = textures[i].type;
+        const std::string& name = textures[i].type;
+        int textureUnit = -1;
         
         if(name == "texture_diffuse" || name == "texture_albedo")
         {
             hasAlbedo = true;
+            textureUnit = 0;
         }
         else if(name == "texture_normal")
         {
             hasNormal = true;
+            textureUnit = 1;
         }
         else if(name == "texture_metallic")
         {
             hasMetallic = true;
+            textureUnit = 2;
         }
         else if(name == "texture_roughness")
         {
             hasRoughness = true;
+            textureUnit = 3;
         }
         else if(name == "texture_ao")
         {
             hasAo = true;
+            textureUnit = 4;
         }
-    }
-    
-    // 텍스처 바인딩 (타입별로)
-    for(unsigned int i = 0; i < textures.size(); i++)
-    {
-        std::string name = textures[i].type;
         
-        if(name == "texture_diffuse" || name == "texture_albedo")
+        // 텍스처 바인딩
+        if (textureUnit >= 0)
         {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, textures[i].id);
-        }
-        else if(name == "texture_normal")
-        {
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, textures[i].id);
-        }
-        else if(name == "texture_metallic")
-        {
-            glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_2D, textures[i].id);
-        }
-        else if(name == "texture_roughness")
-        {
-            glActiveTexture(GL_TEXTURE3);
-            glBindTexture(GL_TEXTURE_2D, textures[i].id);
-        }
-        else if(name == "texture_ao")
-        {
-            glActiveTexture(GL_TEXTURE4);
+            glActiveTexture(GL_TEXTURE0 + textureUnit);
             glBindTexture(GL_TEXTURE_2D, textures[i].id);
         }
     }

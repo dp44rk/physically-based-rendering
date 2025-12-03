@@ -273,6 +273,96 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial *mat, aiTextureType 
     return textures;
 }
 
+// 텍스처 로딩 헬퍼: 여러 경로에서 텍스처 로드 시도
+unsigned char* Model::tryLoadTextureFromPaths(const std::vector<std::string>& paths, int& width, int& height, int& nrComponents)
+{
+    for (const auto& path : paths)
+    {
+        unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrComponents, 0);
+        if (data)
+        {
+            std::cout << "  ✓ Loaded texture from: " << path << std::endl;
+            return data;
+        }
+    }
+    return nullptr;
+}
+
+// 기본 텍스처 경로 생성
+std::vector<std::string> Model::getDefaultTexturePaths(const std::string& baseName, const std::string& textureName)
+{
+    std::vector<std::string> paths;
+    
+    // BaseColor, Diffuse 관련
+    if (baseName.find("diffuse") != std::string::npos || 
+        baseName.find("albedo") != std::string::npos ||
+        baseName.find("base") != std::string::npos ||
+        baseName.find("color") != std::string::npos)
+    {
+        paths = {"Pbr/mjolnir3_lp_GreyMetal_BaseColor.png", "../Pbr/mjolnir3_lp_GreyMetal_BaseColor.png"};
+    }
+    // Normal 관련
+    else if (baseName.find("normal") != std::string::npos)
+    {
+        paths = {"Pbr/mjolnir3_lp_GreyMetal_Normal.png", "../Pbr/mjolnir3_lp_GreyMetal_Normal.png"};
+    }
+    // Metallic 관련
+    else if (baseName.find("metallic") != std::string::npos)
+    {
+        paths = {"Pbr/mjolnir3_lp_GreyMetal_Metallic.png", "../Pbr/mjolnir3_lp_GreyMetal_Metallic.png"};
+    }
+    // Roughness 관련
+    else if (baseName.find("roughness") != std::string::npos || baseName.find("rough") != std::string::npos)
+    {
+        paths = {"Pbr/mjolnir3_lp_GreyMetal_Roughness.png", "../Pbr/mjolnir3_lp_GreyMetal_Roughness.png"};
+    }
+    // AO, Height 관련
+    else if (baseName.find("ao") != std::string::npos || 
+             baseName.find("height") != std::string::npos ||
+             baseName.find("occlusion") != std::string::npos)
+    {
+        paths = {"Pbr/mjolnir3_lp_GreyMetal_Height.png", "../Pbr/mjolnir3_lp_GreyMetal_Height.png"};
+    }
+    // 기본 경로들
+    else
+    {
+        paths = {
+            "Pbr/" + textureName,
+            "../Pbr/" + textureName,
+            "Pbr/mjolnir3_lp_GreyMetal_BaseColor.png",
+            "../Pbr/mjolnir3_lp_GreyMetal_BaseColor.png"
+        };
+    }
+    
+    return paths;
+}
+
+// OpenGL 텍스처 생성
+unsigned int Model::createGLTexture(unsigned char* data, int width, int height, int nrComponents)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+    
+    GLenum format;
+    if (nrComponents == 1)
+        format = GL_RED;
+    else if (nrComponents == 3)
+        format = GL_RGB;
+    else if (nrComponents == 4)
+        format = GL_RGBA;
+    
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    
+    return textureID;
+}
+
 unsigned int Model::TextureFromFile(const char *path, const std::string &directory, bool gamma)
 {
     std::string filename = std::string(path);
@@ -287,19 +377,15 @@ unsigned int Model::TextureFromFile(const char *path, const std::string &directo
     int width, height, nrComponents;
     unsigned char *data = stbi_load(fullPath.c_str(), &width, &height, &nrComponents, 0);
     
-    // 디버그: 첫 번째 시도 경로 출력
-    if (!data)
-    {
-        std::cout << "  Trying to load texture: " << fullPath;
-        if (!directory.empty())
-            std::cout << " (from directory: " << directory << ")";
-        std::cout << std::endl;
-    }
-    
     // 원본 경로에서 찾지 못하면 Pbr 디렉토리에서 시도
     if (!data)
     {
-        // 파일명만 추출 (경로 제거)
+        std::cout << "  Trying to load texture: " << fullPath;
+        if (!directory.empty() && directory != ".")
+            std::cout << " (from directory: " << directory << ")";
+        std::cout << std::endl;
+        
+        // 파일명만 추출
         size_t lastSlash = filename.find_last_of("/\\");
         std::string textureName = (lastSlash != std::string::npos) ? filename.substr(lastSlash + 1) : filename;
         
@@ -307,139 +393,14 @@ unsigned int Model::TextureFromFile(const char *path, const std::string &directo
         size_t dotPos = textureName.find_last_of(".");
         std::string baseName = (dotPos != std::string::npos) ? textureName.substr(0, dotPos) : textureName;
         
-        // Pbr 디렉토리에서 여러 가능한 파일명으로 시도
-        std::vector<std::string> possibleNames = {
-            "Pbr/" + textureName,  // 원본 이름
-            "Pbr/mjolnir3_lp_GreyMetal_BaseColor.png",  // BaseColor
-            "Pbr/mjolnir3_lp_GreyMetal_Normal.png",     // Normal
-            "Pbr/mjolnir3_lp_GreyMetal_Metallic.png",  // Metallic
-            "Pbr/mjolnir3_lp_GreyMetal_Roughness.png", // Roughness
-            "Pbr/mjolnir3_lp_GreyMetal_Height.png"     // Height (AO로 사용 가능)
-        };
-        
-        // BaseColor, Diffuse 관련이면 BaseColor.png 시도
-        if (baseName.find("diffuse") != std::string::npos || 
-            baseName.find("albedo") != std::string::npos ||
-            baseName.find("base") != std::string::npos ||
-            baseName.find("color") != std::string::npos)
-        {
-            std::string paths[] = {"Pbr/mjolnir3_lp_GreyMetal_BaseColor.png", "../Pbr/mjolnir3_lp_GreyMetal_BaseColor.png"};
-            for (const auto& p : paths)
-            {
-                data = stbi_load(p.c_str(), &width, &height, &nrComponents, 0);
-                if (data)
-                {
-                    std::cout << "  ✓ Loaded BaseColor texture from: " << p << std::endl;
-                    break;
-                }
-            }
-        }
-        // Normal 관련이면 Normal.png 시도
-        else if (baseName.find("normal") != std::string::npos)
-        {
-            std::string paths[] = {"Pbr/mjolnir3_lp_GreyMetal_Normal.png", "../Pbr/mjolnir3_lp_GreyMetal_Normal.png"};
-            for (const auto& p : paths)
-            {
-                data = stbi_load(p.c_str(), &width, &height, &nrComponents, 0);
-                if (data)
-                {
-                    std::cout << "  ✓ Loaded Normal texture from: " << p << std::endl;
-                    break;
-                }
-            }
-        }
-        // Metallic 관련이면 Metallic.png 시도
-        else if (baseName.find("metallic") != std::string::npos)
-        {
-            std::string paths[] = {"Pbr/mjolnir3_lp_GreyMetal_Metallic.png", "../Pbr/mjolnir3_lp_GreyMetal_Metallic.png"};
-            for (const auto& p : paths)
-            {
-                data = stbi_load(p.c_str(), &width, &height, &nrComponents, 0);
-                if (data)
-                {
-                    std::cout << "  ✓ Loaded Metallic texture from: " << p << std::endl;
-                    break;
-                }
-            }
-        }
-        // Roughness 관련이면 Roughness.png 시도
-        else if (baseName.find("roughness") != std::string::npos || 
-                 baseName.find("rough") != std::string::npos)
-        {
-            std::string paths[] = {"Pbr/mjolnir3_lp_GreyMetal_Roughness.png", "../Pbr/mjolnir3_lp_GreyMetal_Roughness.png"};
-            for (const auto& p : paths)
-            {
-                data = stbi_load(p.c_str(), &width, &height, &nrComponents, 0);
-                if (data)
-                {
-                    std::cout << "  ✓ Loaded Roughness texture from: " << p << std::endl;
-                    break;
-                }
-            }
-        }
-        // AO, Height 관련이면 Height.png 시도
-        else if (baseName.find("ao") != std::string::npos || 
-                 baseName.find("height") != std::string::npos ||
-                 baseName.find("occlusion") != std::string::npos)
-        {
-            std::string paths[] = {"Pbr/mjolnir3_lp_GreyMetal_Height.png", "../Pbr/mjolnir3_lp_GreyMetal_Height.png"};
-            for (const auto& p : paths)
-            {
-                data = stbi_load(p.c_str(), &width, &height, &nrComponents, 0);
-                if (data)
-                {
-                    std::cout << "  ✓ Loaded AO/Height texture from: " << p << std::endl;
-                    break;
-                }
-            }
-        }
-        
-        // 위에서 찾지 못했으면 모든 가능한 경로 시도
-        if (!data)
-        {
-            for (const auto& path : possibleNames)
-            {
-                data = stbi_load(path.c_str(), &width, &height, &nrComponents, 0);
-                if (data)
-                {
-                    std::cout << "  ✓ Loaded texture from: " << path << std::endl;
-                    break;
-                }
-                // build 디렉토리에서 실행하는 경우를 대비해 ../ 추가
-                std::string parentPath = "../" + path;
-                data = stbi_load(parentPath.c_str(), &width, &height, &nrComponents, 0);
-                if (data)
-                {
-                    std::cout << "  ✓ Loaded texture from: " << parentPath << std::endl;
-                    break;
-                }
-            }
-        }
+        // 기본 텍스처 경로 가져오기
+        std::vector<std::string> paths = getDefaultTexturePaths(baseName, textureName);
+        data = tryLoadTextureFromPaths(paths, width, height, nrComponents);
     }
     
     if (data)
     {
-        // 텍스처가 성공적으로 로드되었을 때만 OpenGL 텍스처 생성
-        unsigned int textureID;
-        glGenTextures(1, &textureID);
-        
-        GLenum format;
-        if (nrComponents == 1)
-            format = GL_RED;
-        else if (nrComponents == 3)
-            format = GL_RGB;
-        else if (nrComponents == 4)
-            format = GL_RGBA;
-        
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        
+        unsigned int textureID = createGLTexture(data, width, height, nrComponents);
         stbi_image_free(data);
         return textureID;
     }
@@ -449,6 +410,6 @@ unsigned int Model::TextureFromFile(const char *path, const std::string &directo
         if (!directory.empty() && directory != ".")
             std::cout << " (directory: " << directory << ")";
         std::cout << std::endl;
-        return 0; // 실패 시 0 반환
+        return 0;
     }
 }

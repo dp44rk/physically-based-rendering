@@ -30,6 +30,11 @@ private:
     Mesh processMesh(aiMesh *mesh, const aiScene *scene);
     std::vector<Texture> loadMaterialTextures(aiMaterial *mat, aiTextureType type, std::string typeName);
     unsigned int TextureFromFile(const char *path, const std::string &directory, bool gamma = false);
+    
+    // 텍스처 로딩 헬퍼 함수
+    unsigned char* tryLoadTextureFromPaths(const std::vector<std::string>& paths, int& width, int& height, int& nrComponents);
+    std::vector<std::string> getDefaultTexturePaths(const std::string& baseName, const std::string& textureName);
+    unsigned int createGLTexture(unsigned char* data, int width, int height, int nrComponents);
 };
 
 #endif

@@ -2,42 +2,29 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include "../include/shader.h"
 #include "../include/model.h"
 #include "../include/camera.h"
+#include "../include/app_state.h"
+#include "../include/input_handler.h"
+
+// 전역 변수 (콜백 함수에서 접근하기 위해)
+AppState* g_appState = nullptr;
+GLFWwindow* g_window = nullptr;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
-
-const unsigned int SCR_WIDTH = 1280;
-const unsigned int SCR_HEIGHT = 720;
-
-// 기본 뷰: 모델이 프레임 안에 들어오도록 적당한 거리
-Camera camera(glm::vec3(0.0f, 0.0f, 10.0f));
-float lastX = SCR_WIDTH / 2.0f;
-float lastY = SCR_HEIGHT / 2.0f;
-bool firstMouse = true;
-
-float deltaTime = 0.0f;
-float lastFrame = 0.0f;
-
-// 키 상태 추적 (한 번만 감지하기 위해)
-bool useTangentSpace = true;
-bool useIBL = true;
-bool albedoIsSRGB = true;
-bool vPressed = false;  // v: Tangent Space
-bool bPressed = false;  // b: IBL
-bool nPressed = false;  // n: Albedo sRGB
-bool mPressed = false;  // m: (예비)
-bool zeroPressed = false;
-bool cursorLocked = true;  // 마우스 커서 잠금 상태
+void setupShader(Shader& shader, const AppState& appState);
+void updateShaderUniforms(Shader& shader, const AppState& appState, 
+                         const glm::vec3* lightPositions, const glm::vec3* lightColors);
 
 int main()
 {
+    using namespace AppConstants;
+    
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -59,8 +46,6 @@ int main()
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
     
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cout << "Failed to initialize GLAD" << std::endl;
@@ -68,6 +53,13 @@ int main()
     }
     
     glEnable(GL_DEPTH_TEST);
+    
+    // 애플리케이션 상태 초기화
+    AppState appState;
+    g_appState = &appState;
+    g_window = window;
+    
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     
     // 키 매핑 안내 출력
     std::cout << "\n=== PBR Renderer 키 매핑 ===" << std::endl;
@@ -81,81 +73,47 @@ int main()
     std::cout << "ESC: 종료\n" << std::endl;
     
     Shader shader("shader.vert", "shader.frag");
-    
-    // 모델 로드 (FBX 버전을 사용해 UV/법선/탄젠트 보존)
     Model ourModel("mjolnirFBX.FBX");
     
-    // PBR 조명 설정 - 모델 주변에 배치 (스케일 조정)
-    glm::vec3 lightPositions[] = {
+    // PBR 조명 설정
+    glm::vec3 lightPositions[MAX_LIGHTS] = {
         glm::vec3( 4.0f,  4.0f,  4.0f),  // 우상전
         glm::vec3(-4.0f,  4.0f,  4.0f),  // 좌상전
         glm::vec3( 0.0f,  4.0f, -4.0f),  // 상후쪽 리머라이트
         glm::vec3( 0.0f, -4.0f,  4.0f)   // 하전쪽 필
     };
-    glm::vec3 lightColors[] = {
+    glm::vec3 lightColors[MAX_LIGHTS] = {
         glm::vec3(65.0f, 65.0f, 65.0f),
         glm::vec3(65.0f, 65.0f, 65.0f),
         glm::vec3(65.0f, 65.0f, 65.0f),
         glm::vec3(65.0f, 65.0f, 65.0f)
     };
     
-    shader.use();
-    shader.setInt("albedoMap", 0);
-    shader.setInt("normalMap", 1);
-    shader.setInt("metallicMap", 2);
-    shader.setInt("roughnessMap", 3);
-    shader.setInt("aoMap", 4);
-    shader.setInt("irradianceMap", 5);
-    shader.setInt("prefilterMap", 6);
-    shader.setInt("brdfLUT", 7);
-    shader.setBool("useIBL", useIBL);
-    shader.setBool("albedoIsSRGB", albedoIsSRGB);
-    shader.setBool("useTangentSpace", useTangentSpace);
-    
-    // 기본 Material 값 설정 (맵이 없을 때 사용) - 밝은 색으로 변경
-    shader.setVec3("albedo", 0.8f, 0.8f, 0.8f);  // 밝은 회색
-    shader.setFloat("metallic", 0.5f);
-    shader.setFloat("roughness", 0.3f);
-    shader.setFloat("ao", 1.0f);
+    setupShader(shader, appState);
     
     while (!glfwWindowShouldClose(window))
     {
-        float currentFrame = glfwGetTime();
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-        
+        appState.updateTime();
         processInput(window);
         
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClearColor(CLEAR_COLOR_R, CLEAR_COLOR_G, CLEAR_COLOR_B, CLEAR_COLOR_A);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
         shader.use();
+        updateShaderUniforms(shader, appState, lightPositions, lightColors);
         
-        // 조명 위치 및 색상 설정
-        for (int i = 0; i < 4; ++i)
-        {
-            shader.setVec3("lightPositions[" + std::to_string(i) + "]", lightPositions[i]);
-            shader.setVec3("lightColors[" + std::to_string(i) + "]", lightColors[i]);
-        }
-        shader.setVec3("viewPos", camera.Position);
-        shader.setInt("numLights", 4);
-        
-        // 셰이더 설정 업데이트
-        shader.setBool("useTangentSpace", useTangentSpace);
-        shader.setBool("useIBL", useIBL);
-        shader.setBool("albedoIsSRGB", albedoIsSRGB);
-        
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-        glm::mat4 view = camera.GetViewMatrix();
+        glm::mat4 projection = glm::perspective(glm::radians(appState.camera.Zoom), 
+                                                (float)SCR_WIDTH / (float)SCR_HEIGHT, 
+                                                NEAR_PLANE, FAR_PLANE);
+        glm::mat4 view = appState.camera.GetViewMatrix();
         shader.setMat4("projection", projection);
         shader.setMat4("view", view);
         
         glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
-        model = glm::scale(model, glm::vec3(0.1f, 0.1f, 0.1f));
+        model = glm::scale(model, glm::vec3(MODEL_SCALE));
         shader.setMat4("model", model);
         
-        ourModel.Draw(shader, useTangentSpace);
+        ourModel.Draw(shader, appState.useTangentSpace);
         
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -165,78 +123,81 @@ int main()
     return 0;
 }
 
+void setupShader(Shader& shader, const AppState& appState)
+{
+    using namespace AppConstants;
+    
+    shader.use();
+    
+    // 텍스처 유닛 설정
+    shader.setInt("albedoMap", TEXTURE_UNIT_ALBEDO);
+    shader.setInt("normalMap", TEXTURE_UNIT_NORMAL);
+    shader.setInt("metallicMap", TEXTURE_UNIT_METALLIC);
+    shader.setInt("roughnessMap", TEXTURE_UNIT_ROUGHNESS);
+    shader.setInt("aoMap", TEXTURE_UNIT_AO);
+    shader.setInt("irradianceMap", TEXTURE_UNIT_IRRADIANCE);
+    shader.setInt("prefilterMap", TEXTURE_UNIT_PREFILTER);
+    shader.setInt("brdfLUT", TEXTURE_UNIT_BRDF_LUT);
+    
+    // 렌더링 모드 설정
+    shader.setBool("useIBL", appState.useIBL);
+    shader.setBool("albedoIsSRGB", appState.albedoIsSRGB);
+    shader.setBool("useTangentSpace", appState.useTangentSpace);
+    
+    // 기본 Material 값 설정
+    shader.setVec3("albedo", DEFAULT_ALBEDO_R, DEFAULT_ALBEDO_G, DEFAULT_ALBEDO_B);
+    shader.setFloat("metallic", DEFAULT_METALLIC);
+    shader.setFloat("roughness", DEFAULT_ROUGHNESS);
+    shader.setFloat("ao", DEFAULT_AO);
+}
+
+void updateShaderUniforms(Shader& shader, const AppState& appState, 
+                         const glm::vec3* lightPositions, const glm::vec3* lightColors)
+{
+    using namespace AppConstants;
+    
+    // 조명 설정
+    for (int i = 0; i < MAX_LIGHTS; ++i)
+    {
+        shader.setVec3("lightPositions[" + std::to_string(i) + "]", lightPositions[i]);
+        shader.setVec3("lightColors[" + std::to_string(i) + "]", lightColors[i]);
+    }
+    shader.setVec3("viewPos", appState.camera.Position);
+    shader.setInt("numLights", MAX_LIGHTS);
+    
+    // 렌더링 모드 업데이트
+    shader.setBool("useTangentSpace", appState.useTangentSpace);
+    shader.setBool("useIBL", appState.useIBL);
+    shader.setBool("albedoIsSRGB", appState.albedoIsSRGB);
+}
+
 void processInput(GLFWwindow *window)
 {
+    if (!g_appState) return;
+    
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
     
     // 카메라 이동
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera.ProcessKeyboard(FORWARD, deltaTime);
+        g_appState->camera.ProcessKeyboard(FORWARD, g_appState->deltaTime);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera.ProcessKeyboard(BACKWARD, deltaTime);
+        g_appState->camera.ProcessKeyboard(BACKWARD, g_appState->deltaTime);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera.ProcessKeyboard(LEFT, deltaTime);
+        g_appState->camera.ProcessKeyboard(LEFT, g_appState->deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera.ProcessKeyboard(RIGHT, deltaTime);
+        g_appState->camera.ProcessKeyboard(RIGHT, g_appState->deltaTime);
     
-    // V 키: Tangent Space 모드 토글
-    if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS && !vPressed)
-    {
-        useTangentSpace = !useTangentSpace;
-        vPressed = true;
-        std::cout << "Tangent Space: " << (useTangentSpace ? "ON" : "OFF") << std::endl;
-    }
-    if (glfwGetKey(window, GLFW_KEY_V) == GLFW_RELEASE)
-    {
-        vPressed = false;
-    }
+    // 키 토글 처리 (헬퍼 함수 사용)
+    handleToggleKey(window, GLFW_KEY_V, g_appState->keyState.vPressed, 
+                   g_appState->useTangentSpace, "Tangent Space");
+    handleToggleKey(window, GLFW_KEY_B, g_appState->keyState.bPressed, 
+                   g_appState->useIBL, "IBL (Image Based Lighting)");
+    handleToggleKey(window, GLFW_KEY_N, g_appState->keyState.nPressed, 
+                   g_appState->albedoIsSRGB, "Albedo sRGB");
     
-    // B 키: IBL 모드 토글
-    if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS && !bPressed)
-    {
-        useIBL = !useIBL;
-        bPressed = true;
-        std::cout << "IBL (Image Based Lighting): " << (useIBL ? "ON" : "OFF") << std::endl;
-    }
-    if (glfwGetKey(window, GLFW_KEY_B) == GLFW_RELEASE)
-    {
-        bPressed = false;
-    }
-    
-    // N 키: Albedo sRGB 모드 토글
-    if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS && !nPressed)
-    {
-        albedoIsSRGB = !albedoIsSRGB;
-        nPressed = true;
-        std::cout << "Albedo sRGB: " << (albedoIsSRGB ? "ON" : "OFF") << std::endl;
-    }
-    if (glfwGetKey(window, GLFW_KEY_N) == GLFW_RELEASE)
-    {
-        nPressed = false;
-    }
-    
-    // 0 키: 마우스 커서 잠금/해제 토글
-    if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS && !zeroPressed)
-    {
-        cursorLocked = !cursorLocked;
-        if (cursorLocked)
-        {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            std::cout << "마우스 커서: 잠금됨" << std::endl;
-            firstMouse = true;  // 마우스 잠금 시 첫 이동 초기화
-        }
-        else
-        {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            std::cout << "마우스 커서: 해제됨" << std::endl;
-        }
-        zeroPressed = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_0) == GLFW_RELEASE)
-    {
-        zeroPressed = false;
-    }
+    // 마우스 커서 잠금 처리
+    handleCursorLock(window, *g_appState);
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
@@ -246,27 +207,29 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
-    // 마우스 커서가 잠겨있을 때만 카메라 회전
-    if (!cursorLocked)
+    if (!g_appState) return;
+    
+    if (!g_appState->cursorLocked)
         return;
     
-    if (firstMouse)
+    if (g_appState->firstMouse)
     {
-        lastX = xpos;
-        lastY = ypos;
-        firstMouse = false;
+        g_appState->lastX = xpos;
+        g_appState->lastY = ypos;
+        g_appState->firstMouse = false;
     }
     
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
+    float xoffset = xpos - g_appState->lastX;
+    float yoffset = g_appState->lastY - ypos;
     
-    lastX = xpos;
-    lastY = ypos;
+    g_appState->lastX = xpos;
+    g_appState->lastY = ypos;
     
-    camera.ProcessMouseMovement(xoffset, yoffset);
+    g_appState->camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    camera.ProcessMouseScroll(yoffset);
+    if (!g_appState) return;
+    g_appState->camera.ProcessMouseScroll(yoffset);
 }
